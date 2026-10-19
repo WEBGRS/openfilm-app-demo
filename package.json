@@ -1,0 +1,15 @@
+{
+  "name": "openfilm-app-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An OpenFilm skill: film a demo of any Windows program while you work it, with a smooth pointer and a camera that moves in on each click.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-timeout=600000 \"test/*.test.mjs\"",
+    "check": "node scripts/check.mjs"
+  }
+}

@@ -1,0 +1,14 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+      # Filming needs a desktop; the runner has none, so the real takes skip and the rest runs
+      - run: npm test

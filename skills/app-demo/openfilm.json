@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0",
+  "repository": "https://github.com/WEBGRS/openfilm-app-demo/tree/main/skills/app-demo",
+  "kind": "workflow",
+  "order": 21,
+  "icon": "monitor",
+  "cover": "cover.jpg",
+  "title": {
+    "en": "Desktop app demo",
+    "zh-CN": "桌面软件演示",
+    "ja": "デスクトップアプリのデモ",
+    "ko": "데스크톱 앱 데모",
+    "es": "Demo de app de escritorio"
+  },
+  "summary": {
+    "en": "A demo of any Windows program, filmed while you work it, with a smooth pointer and a camera that moves in on each click.",
+    "zh-CN": "你操作任意 Windows 软件时录下的演示，指针平滑，每次点击镜头自动推近。",
+    "ja": "Windows のアプリを操作しながら撮るデモ。ポインターは滑らかに、クリックのたびにカメラが寄ります。",
+    "ko": "Windows 프로그램을 직접 조작하며 촬영하는 데모. 포인터는 매끄럽고, 클릭할 때마다 카메라가 다가갑니다.",
+    "es": "Una demo de cualquier programa de Windows, grabada mientras lo usas, con un puntero suave y una cámara que se acerca en cada clic."
+  },
+  "details": {
+    "en": "Best for: product demos, tutorials and feature videos of software that runs outside the browser: editors, spreadsheets, design tools, games.\nWhat it does: puts a record bar on your screen; you press Start, work the app, mark the moments worth naming and press Stop. Only that window is filmed, every click is logged, and the film gets a smoothed pointer and a camera that moves in on each click. Windows only.",
+    "zh-CN": "适合：浏览器之外的软件的产品演示、教程和功能介绍，比如编辑器、表格、设计工具、游戏。\n它会：在你屏幕上放一条录制条；你点开始、操作软件、在值得说明的时刻点标记，最后点停止。只录那个窗口，每次点击都有记录，成片里指针经过平滑，每次点击镜头自动推近。仅支持 Windows。",
+    "ja": "こんなときに：ブラウザの外で動くソフトの製品デモ、チュートリアル、機能紹介。エディター、表計算、デザインツール、ゲームなど。\nすること：画面に録画バーを出します。開始を押してアプリを操作し、説明したい瞬間にマークを付けて停止を押すだけ。そのウィンドウだけを撮り、クリックはすべて記録され、ポインターは滑らかに、クリックのたびにカメラが寄ります。Windows のみ。",
+    "ko": "이럴 때: 브라우저 밖에서 동작하는 소프트웨어의 제품 데모, 튜토리얼, 기능 소개. 편집기, 스프레드시트, 디자인 도구, 게임 등.\n하는 일: 화면에 녹화 막대를 띄웁니다. 시작을 누르고 앱을 조작하다가 설명할 순간에 마크를 누르고, 끝나면 정지를 누르세요. 그 창만 촬영하고 클릭은 모두 기록되며, 포인터는 매끄럽게, 클릭할 때마다 카메라가 다가갑니다. Windows 전용.",
+    "es": "Ideal para: demos de producto, tutoriales y vídeos de funciones de software que funciona fuera del navegador: editores, hojas de cálculo, herramientas de diseño, juegos.\nQué hace: pone una barra de grabación en tu pantalla; pulsas Iniciar, usas la app, marcas los momentos que importan y pulsas Detener. Solo se graba esa ventana, cada clic queda registrado y la película recibe un puntero suavizado y una cámara que se acerca en cada clic. Solo Windows."
+  }
+}
