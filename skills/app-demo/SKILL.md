@@ -29,17 +29,17 @@ record is a screen demo, not this.
 ## What you have
 
 `node <this skill's folder>/scripts/record-app.mjs` films a take on Windows. `start` puts a record bar on the person's
-screen and returns at once: they press Start, work the app, press Mark at each moment worth naming and Stop when
-done; `wait` gives the take. Only the window (or a screen) is filmed, never the bar. Beside the video it writes the
-take's record (every pointer move and click, the marks), a page that draws the pointer, smoothed, with its clicks, laid
-over the video with the same `at`, `#t=` and box, and a camera page: the take moving in on each click with the pointer
-drawn in, used in place of the video with the same `#t=`; `camera` changes how far it moves in without filming. A page
-plays at one speed: clips sped up stay plain video. `--help` says the rest. It builds its Windows helper,
-`<this skill's folder>/scripts/deskrec.cs`, once with the C# compiler Windows ships; filming a window needs FFmpeg 8
-or later, and `install` downloads one (87 MB): ask first.
+screen and returns at once: they press Start, work the app, press Mark at each moment worth naming and Stop when done;
+`wait` gives the take. Only the window (or a screen) is filmed, never the bar. Beside the video it writes the take's
+record (every pointer move and click, the marks), a page that draws the pointer, smoothed, with its clicks, laid over
+the video with the same `at`, `#t=` and box, and a camera page: the take moving in on each click with the pointer
+drawn in, used in place of the video in film.html with the same `#t=`; `camera` changes how far it moves in without
+filming. A page plays at one speed: clips sped up stay plain video. `--help` says the rest. It builds its Windows
+helper, `<this skill's folder>/scripts/deskrec.cs`, once with the C# compiler Windows ships; filming a window needs
+FFmpeg 8 or later, and `install` downloads one (87 MB): ask first.
 
-A take is a recording like any other: trimmed with `#t=`, sped up with `speed`, never re-encoded. `look` checks the
-film, `get` brings voice, music and sound; and anything you can make pictures and motion with.
+A take is a recording like any other, a clip of the film: trimmed with `#t=`, sped up with `speed`, never re-encoded.
+`look` checks the film, `get` brings voice, music and sound; and anything you can make pictures and motion with.
 
 ## With the person
 
