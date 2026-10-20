@@ -4,12 +4,18 @@ An [OpenFilm](https://github.com/openfilm/openfilm) skill: film a demo of any Wi
 click is logged, so the film gets a smooth pointer and a camera that moves in on each click, with no keyframes set by
 hand.
 
+![An Excel take cut in OpenFilm: the camera moves in on each click and follows the pointer](docs/demo.gif)
+
+Filmed in Excel with this skill, cut in OpenFilm to the moments around each click and mark, rendered by OpenFilm.
+`node demo/make.mjs <take.mp4>` makes it from any take.
+
 | | | |
 | --- | --- | --- |
 | <img src="skills/app-demo/cover.jpg" width="200" alt=""> | [Desktop app demo](skills/app-demo) | A demo of any Windows program, filmed while you work it, with a smooth pointer and a camera that moves in on each click. |
 
 For a site or web app, use [web-demo](https://github.com/WEBGRS/openfilm-web-demo) instead: it films from a list of
-steps and films again after every release.
+steps and films again after every release. For voice-over without a key,
+[local-voice](https://github.com/WEBGRS/openfilm-local-voice) runs on your own computer and times the subtitles.
 
 ## Use it
 
