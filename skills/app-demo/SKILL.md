@@ -43,7 +43,8 @@ A take is a recording like any other, a clip of the film: trimmed with `#t=`, sp
 
 Voice-over is said over its moment: `moments` prints where each mark and click falls on the film. Another language
 uses the same takes: its lines translated, voiced with `get tts` on a track of their own at the same moments, the
-other languages' tracks muted, so the subtitles come from the one heard.
+other languages' tracks muted, so the subtitles come from the one heard. `guide` writes a take out as a guide, a
+picture of each click with its spot outlined; write what each step does in the person's words.
 
 ## With the person
 

@@ -59,11 +59,16 @@ node record-app.mjs wait <take.mp4>                    # waits for the take (100
 node record-app.mjs stop <take.mp4>                    # as Stop on the bar; cancel throws the take away
 node record-app.mjs camera <take.mp4> --zoom 2         # the camera page again, closer
 node record-app.mjs moments <take.mp4>                 # where each mark and click falls on the film
+node record-app.mjs guide <take.mp4>                   # the take as a written guide
 ```
 
 `moments` is for voice-over: a line about a click goes at that click's time on the film. For another language, keep
 the takes, voice the translated lines with `openfilm get tts` on a track of their own at the same moments, and mute
 the other languages' tracks; OpenFilm makes the subtitles from the track you hear.
+
+`guide` writes `<take>.guide.md` beside the take, with a picture of each click in `<take>.guide/`: the moment of
+the click, a square around the spot, and a heading for each mark. The take logs where the pointer clicked, not what
+it clicked, so each step reads "Click" until the agent writes what it does from the picture.
 
 `start` returns at once and the take goes on in a process of its own, so an agent whose commands time out after a
 minute or two can still wait for a person who takes ten.

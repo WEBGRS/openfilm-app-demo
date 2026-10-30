@@ -10,7 +10,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 const FPS = 30;
 /** How far the camera page moves in on a click, unless the record says otherwise. */
 export const ZOOM = 1.7;
@@ -30,7 +30,10 @@ const HELP = `app-demo ${VERSION}: film a desktop app while the person works it 
   node record-app.mjs moments <take.mp4> [--film film.html]
                                                      where each mark and click falls, in the take and on the film:
                                                      where a line said over it goes
-  node record-app.mjs install                         downloads FFmpeg with window capture (87 MB), when the one on
+  node record-app.mjs guide <take.mp4> [--out guide.md]
+                                                     the take as a written guide: a picture of each click, the spot
+                                                     outlined, a heading for each mark (<name>.guide.md beside it)
+  node record-app.mjs install                        downloads FFmpeg with window capture (87 MB), when the one on
                                                      the PATH is older than 8
 
 Options for start:
@@ -519,6 +522,54 @@ export function moments(videoArg, o = {}) {
   ];
 }
 
+/** The guide of a take: a heading for each mark, a step for each click, pictured as it presses. */
+export function guideRows(record) {
+  const rows = [];
+  let n = 0;
+  for (const e of record.take.events) {
+    if (e.type === 'mark') rows.push({ heading: e.name });
+    else if (e.type === 'down') rows.push({ n: ++n, at: e.t, x: e.x, y: e.y });
+  }
+  return rows;
+}
+
+/** The take written out as a step-by-step guide: Markdown, and a picture of each click with the spot outlined. */
+export function guide(videoArg, o = {}) {
+  const video = resolve(videoArg ?? '');
+  const recFile = recordFileFor(video);
+  if (!existsSync(recFile)) throw new Error(`${shown(recFile)} is not there: only a take made by record-app.mjs has a guide`);
+  const record = JSON.parse(readFileSync(recFile, 'utf8'));
+  const name = basename(video, extname(video));
+  const md = resolve(o.out ?? join(dirname(video), `${name}.guide.md`));
+  if (extname(md).toLowerCase() !== '.md') throw new Error(`--out ${o.out}: the guide is a .md file`);
+  const pics = join(dirname(md), basename(md, extname(md)));
+  const ff = o.ffmpeg || process.env.APP_DEMO_FFMPEG || 'ffmpeg';
+  const [w, h] = String(record.size).split('x').map(Number);
+  const rows = guideRows(record);
+  mkdirSync(pics, { recursive: true });
+  const out = [`# ${name}`, '', `${rows.filter((r) => r.n).length} clicks${record.app?.window ? ` in ${record.app.window}` : ''}. Each picture is the moment of the click, the spot outlined: write what each step does.`, ''];
+  for (const r of rows) {
+    if (r.heading !== undefined) {
+      out.push(`## ${r.heading}`, '');
+      continue;
+    }
+    const file = `${String(r.n).padStart(2, '0')}.png`;
+    const side = 56;
+    const x = Math.max(0, Math.min(w - side, Math.round(r.x - side / 2)));
+    const y = Math.max(0, Math.min(h - side, Math.round(r.y - side / 2)));
+    // The frame shown at the click: the first one at or after half a frame before it
+    const ss = Math.max(0, r.at - 0.5 / (record.fps ?? FPS));
+    const run = spawnSync(ff, ['-v', 'error', '-y', '-ss', fmt(ss), '-i', video, '-frames:v', '1', '-vf', `scale=${w}:${h}:flags=lanczos,drawbox=x=${x}:y=${y}:w=${side}:h=${side}:color=0xF2542D:t=4`, join(pics, file)], { encoding: 'utf8', windowsHide: true });
+    if (run.status !== 0) throw new Error(`ffmpeg could not take click ${r.n}'s picture: ${(run.stderr || run.error?.message || '').trim()}`);
+    out.push(`### ${r.n}. Click`, '', `![Step ${r.n}](${basename(pics)}/${file})`, '');
+  }
+  writeFileSync(md, `${out.join('\n').trimEnd()}\n`);
+  return [
+    `${shown(md)}  ${rows.filter((r) => r.n).length} steps, ${rows.filter((r) => r.heading !== undefined).length} headings`,
+    `${shown(pics)}  a picture of each click, the spot outlined`,
+  ];
+}
+
 /** The zoom spans of a take, one line each. */
 export function zoomLines(record) {
   const plan = zoomPlan(record);
@@ -883,6 +934,7 @@ async function main(argv) {
       window: { type: 'string' }, hwnd: { type: 'string' }, area: { type: 'boolean' }, screen: { type: 'string' }, note: { type: 'string' },
       marks: { type: 'string' }, max: { type: 'string' }, wait: { type: 'string' }, lang: { type: 'string' }, zoom: { type: 'string' },
       timeout: { type: 'string' }, film: { type: 'string' }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean' },
+      out: { type: 'string' },
     },
   });
   if (v.version) return console.log(VERSION);
@@ -910,7 +962,8 @@ async function main(argv) {
   if (cmd === 'stop' || cmd === 'cancel') return console.log(control(arg, cmd));
   if (cmd === 'camera') return console.log(camera(arg, { zoom: v.zoom }).join('\n'));
   if (cmd === 'moments') return console.log(moments(arg, { film: v.film }).join('\n'));
-  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera, moments or install`);
+  if (cmd === 'guide') return console.log(guide(arg, { out: v.out }).join('\n'));
+  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera, moments, guide or install`);
 }
 
 const same = (x) => (windows() ? resolve(x).toLowerCase() : resolve(x));

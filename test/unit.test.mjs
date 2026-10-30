@@ -116,3 +116,33 @@ test('moments: each mark and click, in the take and on the film, once per clip t
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('guide: a heading for each mark, a picture of each click with the spot outlined, at the take\'s px size', async () => {
+  const { mkdtempSync, readFileSync, rmSync, writeFileSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { guide, guideRows } = await import('../skills/app-demo/scripts/record-app.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'app-demo-guide-'));
+  try {
+    // A take filmed at screen scale 2: 1280 x 720 video, 640 x 360 in the take's px
+    const made = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=white:s=1280x720:r=30:d=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(dir, 'app.mp4')], { encoding: 'utf8' });
+    assert.equal(made.status, 0, made.stderr);
+    const events = [{ t: 0.2, type: 'move', x: 1, y: 1 }, { t: 1, type: 'down', x: 100, y: 100 }, { t: 2.5, type: 'mark', name: 'saved' }, { t: 4, type: 'down', x: 635, y: 355 }];
+    const record = { app: { window: 'Book1 - Excel' }, size: '640x360', scale: 2, fps: 30, take: { duration: 6, events } };
+    writeFileSync(join(dir, 'app.record.json'), JSON.stringify(record));
+    assert.deepEqual(guideRows(record), [{ n: 1, at: 1, x: 100, y: 100 }, { heading: 'saved' }, { n: 2, at: 4, x: 635, y: 355 }]);
+    const lines = guide(join(dir, 'app.mp4'));
+    assert.match(lines[0], /2 steps, 1 headings/);
+    const md = readFileSync(join(dir, 'app.guide.md'), 'utf8');
+    for (const s of ['2 clicks in Book1 - Excel', '### 1. Click', '## saved', '](app.guide/02.png)']) assert.ok(md.includes(s), s);
+    // The second spot sits against the corner: outlined inside the picture
+    const px = spawnSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'app.guide', '02.png'), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 1 << 24 }).stdout;
+    assert.equal(px.length, 640 * 360 * 3);
+    let orange = 0;
+    for (let i = 0; i < px.length; i += 3) if (Math.abs(px[i] - 242) < 30 && Math.abs(px[i + 1] - 84) < 30 && Math.abs(px[i + 2] - 45) < 30) orange++;
+    assert.ok(orange > 600, `${orange} outline pixels`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
