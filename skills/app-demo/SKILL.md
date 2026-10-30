@@ -41,9 +41,13 @@ FFmpeg 8 or later, and `install` downloads one (87 MB): ask first.
 A take is a recording like any other, a clip of the film: trimmed with `#t=`, sped up with `speed`, never re-encoded.
 `look` checks the film, `get` brings voice, music and sound; and anything you can make pictures and motion with.
 
+Voice-over is said over its moment: `moments` prints where each mark and click falls on the film. Another language
+uses the same takes: its lines translated, voiced with `get tts` on a track of their own at the same moments, the
+other languages' tracks muted, so the subtitles come from the one heard.
+
 ## With the person
 
 What they ask for comes before anything here. They do the filming, so tell them before the bar comes up: which app
-and window, what to do (put it in the bar's note, in their words), and what to mark. Ask who the demo is for and the
-one thing it must show, without holding up the work. When done, tell them in a few lines what it shows, what was
+and window, what to do (put it in the bar's note, in their words), and what to mark. Ask who the demo is for, the one
+thing it must show and its languages, without holding up the work. When done, tell them in a few lines what it shows, what was
 left out or hidden, and which takes make it.

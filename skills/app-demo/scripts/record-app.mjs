@@ -10,7 +10,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 const FPS = 30;
 /** How far the camera page moves in on a click, unless the record says otherwise. */
 export const ZOOM = 1.7;
@@ -27,6 +27,9 @@ const HELP = `app-demo ${VERSION}: film a desktop app while the person works it 
   node record-app.mjs stop <take.mp4>                 stops it, as Stop on the bar does; cancel throws it away
   node record-app.mjs camera <take.mp4> [--zoom <n|off>]
                                                      writes the camera page again; nothing is filmed
+  node record-app.mjs moments <take.mp4> [--film film.html]
+                                                     where each mark and click falls, in the take and on the film:
+                                                     where a line said over it goes
   node record-app.mjs install                         downloads FFmpeg with window capture (87 MB), when the one on
                                                      the PATH is older than 8
 
@@ -472,6 +475,50 @@ if (!window.filmHost) {
 `;
 }
 
+/** The clips of film.html that are this take (its video, cursor or camera page): #t= in and out, at and speed. */
+export function takeClips(html, filmDir, files, duration) {
+  const targets = new Set(files.map((f) => resolve(f).toLowerCase()));
+  const out = [];
+  for (const [, attrs] of html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<(?:iframe|video)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
+    const attr = (n) => new RegExp(`(?:^|\\s)${n}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attrs)?.slice(1).find((x) => x !== undefined);
+    const src = attr('src');
+    if (!src) continue;
+    const [path, frag = ''] = src.split('#');
+    let abs;
+    try {
+      abs = resolve(filmDir, decodeURIComponent(path.replace(/&amp;/g, '&')));
+    } catch {
+      continue;
+    }
+    if (!targets.has(abs.toLowerCase())) continue;
+    const t = /^t=(?:npt:)?(\d*\.?\d*)(?:,(\d*\.?\d+))?$/.exec(frag);
+    out.push({ tin: t && t[1] !== '' ? Number(t[1]) : 0, tout: t && t[2] !== undefined ? Number(t[2]) : duration, at: Number(attr('at') ?? 0) || 0, speed: Number(attr('speed') ?? 1) || 1 });
+  }
+  return out;
+}
+
+/** Where each mark and click of a take falls, in the take and on the film: one line each. */
+export function moments(videoArg, o = {}) {
+  const video = resolve(videoArg ?? '');
+  const recFile = recordFileFor(video);
+  if (!existsSync(recFile)) throw new Error(`${shown(recFile)} is not there: only a take made by record-app.mjs has moments`);
+  const record = JSON.parse(readFileSync(recFile, 'utf8'));
+  let film = o.film ? resolve(o.film) : null;
+  for (let d = dirname(video), i = 0; !film && i < 6; i++, d = dirname(d)) if (existsSync(join(d, 'film.html'))) film = join(d, 'film.html');
+  const clips = film && existsSync(film) ? takeClips(readFileSync(film, 'utf8'), dirname(film), [video, cursorFileFor(video), cameraFileFor(video)], record.take.duration) : [];
+  let click = 0;
+  const rows = record.take.events.filter((e) => e.type === 'mark' || e.type === 'down')
+    .map((e) => ({ what: e.type === 'mark' ? `mark "${e.name}"` : `click ${++click}`, t: e.t }));
+  const onFilm = (t) => [...new Set(clips.filter((c) => t >= c.tin - 1e-6 && t < c.tout).map((c) => round3(c.at + (t - c.tin) / c.speed)))];
+  return [
+    `${shown(video)}: ${fmt(record.take.duration)} s${film ? `, placed by ${shown(film)}` : ', no film.html found'}`,
+    ...rows.map((r) => {
+      const at = onFilm(r.t);
+      return `  ${r.what}: take ${fmt(r.t)} s, ${at.length ? `film ${at.map((x) => `${fmt(x)} s`).join(' and ')}` : 'not in the film'}`;
+    }),
+  ];
+}
+
 /** The zoom spans of a take, one line each. */
 export function zoomLines(record) {
   const plan = zoomPlan(record);
@@ -835,7 +882,7 @@ async function main(argv) {
     options: {
       window: { type: 'string' }, hwnd: { type: 'string' }, area: { type: 'boolean' }, screen: { type: 'string' }, note: { type: 'string' },
       marks: { type: 'string' }, max: { type: 'string' }, wait: { type: 'string' }, lang: { type: 'string' }, zoom: { type: 'string' },
-      timeout: { type: 'string' }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean' },
+      timeout: { type: 'string' }, film: { type: 'string' }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean' },
     },
   });
   if (v.version) return console.log(VERSION);
@@ -862,7 +909,8 @@ async function main(argv) {
   }
   if (cmd === 'stop' || cmd === 'cancel') return console.log(control(arg, cmd));
   if (cmd === 'camera') return console.log(camera(arg, { zoom: v.zoom }).join('\n'));
-  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera or install`);
+  if (cmd === 'moments') return console.log(moments(arg, { film: v.film }).join('\n'));
+  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera, moments or install`);
 }
 
 const same = (x) => (windows() ? resolve(x).toLowerCase() : resolve(x));

@@ -58,7 +58,12 @@ node record-app.mjs start <take.mp4> --window <text>   # the record bar comes up
 node record-app.mjs wait <take.mp4>                    # waits for the take (100 s per call; run again)
 node record-app.mjs stop <take.mp4>                    # as Stop on the bar; cancel throws the take away
 node record-app.mjs camera <take.mp4> --zoom 2         # the camera page again, closer
+node record-app.mjs moments <take.mp4>                 # where each mark and click falls on the film
 ```
+
+`moments` is for voice-over: a line about a click goes at that click's time on the film. For another language, keep
+the takes, voice the translated lines with `openfilm get tts` on a track of their own at the same moments, and mute
+the other languages' tracks; OpenFilm makes the subtitles from the track you hear.
 
 `start` returns at once and the take goes on in a process of its own, so an agent whose commands time out after a
 minute or two can still wait for a person who takes ten.

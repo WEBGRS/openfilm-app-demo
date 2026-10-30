@@ -87,3 +87,32 @@ test('the pages: a pointer page over the video, and a camera page that plays the
   assert.match(cam, /video\.currentTime = Math\.min\(Math\.max\(t, 0\), 7\.983\)/);
   assert.match(cam, /const PATH = \[\[1,/);
 });
+
+test('moments: each mark and click, in the take and on the film, once per clip that shows it', async () => {
+  const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { moments } = await import('../skills/app-demo/scripts/record-app.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'app-demo-moments-'));
+  try {
+    mkdirSync(join(dir, 'assets'));
+    const events = [{ t: 0.4, type: 'move', x: 1, y: 1 }, { t: 1, type: 'down', x: 5, y: 5 }, { t: 2.5, type: 'mark', name: 'saved' }, { t: 4, type: 'down', x: 9, y: 9 }];
+    writeFileSync(join(dir, 'assets', 'excel.record.json'), JSON.stringify({ take: { duration: 6, events } }));
+    // The camera page from 0.5 s placed at 10 s, at double speed; a cursor page over a part that has no click
+    writeFileSync(join(dir, 'film.html'), `<section>
+  <iframe src="assets/excel.camera.html#t=0.5,5" at="10" speed="2"></iframe>
+  <!-- <video src="assets/excel.mp4#t=0,6" at="40"></video> -->
+  <iframe src="assets/excel.cursor.html#t=5,6" at="30"></iframe>
+  <video src="assets/other.mp4" at="0"></video>
+</section>`);
+    const lines = moments(join(dir, 'assets', 'excel.mp4'));
+    assert.match(lines[0], /6 s, placed by/);
+    assert.deepEqual(lines.slice(1), [
+      '  click 1: take 1 s, film 10.25 s',
+      '  mark "saved": take 2.5 s, film 11 s',
+      '  click 2: take 4 s, film 11.75 s',
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
