@@ -1,7 +1,11 @@
 // What the helper reports, as a take; the pointer, the camera and the pages; no window is filmed
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { cameraPath, captureFilter, finishFilter, pointerPath, takePage, toEvents, ZOOM, zoomPlan } from '../skills/app-demo/scripts/record-app.mjs';
+
+// The guide's pictures need ffmpeg; the CI runner has none
+const noFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0 ? false : 'no ffmpeg on the PATH';
 
 test('helper events become take events: seconds from the first frame, px over the screen scale, named marks', () => {
   const go = 1_000_000;
@@ -117,9 +121,8 @@ test('moments: each mark and click, in the take and on the film, once per clip t
   }
 });
 
-test('guide: a heading for each mark, a picture of each click with the spot outlined, at the take\'s px size', async () => {
+test('guide: a heading for each mark, a picture of each click with the spot outlined, at the take\'s px size', { skip: noFfmpeg }, async () => {
   const { mkdtempSync, readFileSync, rmSync, writeFileSync } = await import('node:fs');
-  const { spawnSync } = await import('node:child_process');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const { guide, guideRows } = await import('../skills/app-demo/scripts/record-app.mjs');
