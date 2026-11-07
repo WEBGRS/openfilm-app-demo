@@ -23,7 +23,7 @@ steps and films again after every release. For voice-over without a key,
   ask for a demo of your app.
 - **In your own agent** (Claude Code, Codex and others): `npx skills add WEBGRS/openfilm-app-demo`.
 
-It needs Windows 10 or 11, Node 22 or later, and FFmpeg 8 or later (for Windows Graphics Capture). If the FFmpeg on
+It needs Windows 10 or 11, Node 22 or later, OpenFilm 0.3 or later, and FFmpeg 8 or later (for Windows Graphics Capture). If the FFmpeg on
 your PATH is older, `record-app.mjs install` downloads one (87 MB). Nothing else is installed: the script has no
 dependencies, its helper is compiled once by the C# compiler that ships with Windows, and nothing is sent anywhere.
 
@@ -47,17 +47,22 @@ Beside `export.mp4` (H.264, 30 fps, the window's own pixels, a key frame every q
 - `export.cursor.html`: an OpenFilm page that draws the pointer and its clicks. The video has no pointer of its own,
   so this one is smoothed (a hand's jitter and the gaps between logged moves are gone) and fades out after three
   still seconds. Put it on the track above the video with the same `at`, `#t=` and box.
-- `export.camera.html`: the take as an OpenFilm page that moves in on each click, keeps the pointer in view while it
-  is zoomed in, and draws the pointer and clicks into the same frame. Use it in place of the video, with the same
-  `#t=`. It moves in 1.7 times; `record-app.mjs camera export.mp4 --zoom 2.2` (or `off`) writes it again, nothing
-  filmed.
+- `export.view/film.html`: a film of its own (OpenFilm 0.3 lets a film be a clip of another): the take moving in on
+  each click, keeping the pointer in view while it is zoomed in, with the pointer and clicks drawn in. Use it as a
+  clip in place of the video, with the same `#t=`; the film crops it at its box, so it can be a card or the whole
+  frame. It moves in 1.7 times; `record-app.mjs camera export.mp4 --zoom 2.2` (or `off`) writes it again, nothing
+  filmed. Inside, the video and the pointer page move by CSS keyframes, and it renders about as fast as plain video.
+  An earlier version wrote the same camera as a page with the video inside, `export.camera.html`: it renders many
+  times slower, because the browser seeks the video again for every frame. `camera` keeps such a page up to date
+  beside a take that has one, and `check` says so when a film uses it.
 
 ```sh
 node record-app.mjs windows excel                      # open windows that match, and the screens
 node record-app.mjs start <take.mp4> --window <text>   # the record bar comes up; returns at once
 node record-app.mjs wait <take.mp4>                    # waits for the take (100 s per call; run again)
 node record-app.mjs stop <take.mp4>                    # as Stop on the bar; cancel throws the take away
-node record-app.mjs camera <take.mp4> --zoom 2         # the camera page again, closer
+node record-app.mjs camera <take.mp4> --zoom 2         # the view again, closer
+node record-app.mjs check <film.html>                  # clips past a take's end, a pointer page off its video, clicks with no pointer
 node record-app.mjs moments <take.mp4>                 # where each mark and click falls on the film
 node record-app.mjs guide <take.mp4>                   # the take as a written guide
 ```
@@ -80,7 +85,7 @@ minute or two can still wait for a person who takes ten.
 - You work the app yourself, so a take can't be filmed again by itself. For that, use web-demo on a web product.
 - Filming a window leaves out its menus and pop-ups, which are windows of their own: use `--area` for those.
 - Keys are not logged, only the pointer and clicks.
-- A page plays at one speed, so the cursor and camera pages can't be sped up in the film. Speed up the plain video.
+- A page plays at one speed, so the cursor page and the view can't be sped up in the film. Speed up the plain video, which then has no camera.
 
 ## Develop
 
@@ -88,6 +93,8 @@ minute or two can still wait for a person who takes ten.
 npm test            # unit tests, then real takes of a test window with scripted input (Windows, about 30 s)
 npm run check       # the skill folder against OpenFilm's skill rules
 ```
+
+`evals/README.md` says how the skill was tried, with and without it, on two requests.
 
 The real takes open a small test window that paints its own clock into every frame, film it with the record bar
 hidden and the pointer scripted (`APP_DEMO_FAKE`), and check that each frame was painted within 80 ms of when the take

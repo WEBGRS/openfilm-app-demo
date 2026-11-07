@@ -1,5 +1,5 @@
 // The README's GIF and the skill's cover from one real take: the moments around each click and mark, cut together
-// in an OpenFilm film of camera-page clips, rendered by OpenFilm. Usage: node demo/make.mjs <take.mp4> [cover mark] [until s]
+// in an OpenFilm film of clips of the take's view, rendered by OpenFilm. Usage: node demo/make.mjs <take.mp4> [cover mark] [until s]
 import { spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -14,7 +14,9 @@ const record = JSON.parse(readFileSync(join(dirname(take), `${name}.record.json`
 const FILM = join(ROOT, 'out', 'film');
 rmSync(FILM, { recursive: true, force: true });
 mkdirSync(join(FILM, 'assets'), { recursive: true });
-for (const f of [`${name}.mp4`, `${name}.camera.html`]) copyFileSync(join(dirname(take), f), join(FILM, 'assets', f));
+for (const f of [`${name}.mp4`, `${name}.cursor.html`]) copyFileSync(join(dirname(take), f), join(FILM, 'assets', f));
+mkdirSync(join(FILM, 'assets', `${name}.view`), { recursive: true });
+copyFileSync(join(dirname(take), `${name}.view`, 'film.html'), join(FILM, 'assets', `${name}.view`, 'film.html'));
 copyFileSync(join(import.meta.dirname, 'bg.html'), join(FILM, 'bg.html'));
 
 // The moments worth seeing: each click and mark, a second before it to two after, joined when they touch
@@ -35,7 +37,7 @@ const boxW = Math.round((boxH * w) / h);
 const left = Math.round((1920 - boxW) / 2);
 let at = 0;
 const clips = spans.map((s, i) => {
-  const clip = `  <iframe id="shot-${i + 1}" src="assets/${name}.camera.html#t=${r3(s.a)},${r3(s.b)}" at="${r3(at)}" class="shot" style="left: ${left}px; top: 60px; width: ${boxW}px; height: ${boxH}px"></iframe>`;
+  const clip = `  <iframe id="shot-${i + 1}" src="assets/${name}.view/film.html#t=${r3(s.a)},${r3(s.b)}" at="${r3(at)}" class="shot" style="left: ${left}px; top: 60px; width: ${boxW}px; height: ${boxH}px"></iframe>`;
   s.at = at;
   at += s.b - s.a;
   return clip;
@@ -69,8 +71,8 @@ const run = (cmd, args, cwd = ROOT) => new Promise((done, fail) => {
   child.on('error', fail);
   child.on('close', (code) => (code === 0 ? done() : fail(new Error(`${cmd} failed (${code})`))));
 });
-await run('npx', ['-y', 'openfilm@0.2.1', 'look'], FILM);
-await run('npx', ['-y', 'openfilm@0.2.1', 'render', '--workers', '1'], FILM);
+await run('npx', ['-y', 'openfilm@0.3.0', 'look'], FILM);
+await run('npx', ['-y', 'openfilm@0.3.0', 'render', '--workers', '1'], FILM);
 const mp4 = join(FILM, 'film.mp4');
 mkdirSync(join(ROOT, 'docs'), { recursive: true });
 await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', mp4, '-filter_complex', 'fps=12,scale=800:-2:flags=lanczos,split[x][y];[x]palettegen=max_colors=160:stats_mode=diff[p];[y][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle', join(ROOT, 'docs', 'demo.gif')]);

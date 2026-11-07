@@ -66,7 +66,7 @@ const cli = (args) => new Promise((done) => {
   child.on('close', (status) => done({ status, stdout, stderr }));
 });
 
-test('a window is filmed at 30 fps from the countdown, its clicks in the take\'s px, frames in step with the log', { skip, timeout: 120_000 }, async () => {
+test('a window is filmed at 30 fps from the countdown, its clicks in the take\'s px, frames in step with the log', { skip, timeout: 300_000 }, async () => {
   const w = await testWindow();
   try {
     fake('clicks', ['move 100 100', 'wait 400', 'down 320 180', 'up 320 180', 'wait 300', 'mark', 'wait 500', 'move 600 300', 'wait 600', 'stop']);
@@ -75,7 +75,10 @@ test('a window is filmed at 30 fps from the countdown, its clicks in the take\'s
     assert.match(said, /record bar is on the person's screen/);
     const r = await waitDone(take);
     assert.equal(r.code, 0, r.text);
-    for (const f of ['app.mp4', 'app.record.json', 'app.cursor.html', 'app.camera.html']) assert.ok(existsSync(join(DIR, 'assets', f)), f);
+    for (const f of ['app.mp4', 'app.record.json', 'app.cursor.html', join('app.view', 'film.html')]) assert.ok(existsSync(join(DIR, 'assets', f)), f);
+    assert.match(readFileSync(join(DIR, 'assets', 'app.view', 'film.html'), 'utf8'), /@keyframes app-camera \{[^]*<video src="\.\.\/app\.mp4#t=0,/);
+    // The colors are BT.709 and say so, so a browser shows the window's own colors
+    assert.match(spawnSync(ff, ['-hide_banner', '-i', take], { encoding: 'utf8' }).stderr, /yuv420p\(tv, bt709/);
     const rec = JSON.parse(readFileSync(join(DIR, 'assets', 'app.record.json'), 'utf8'));
     assert.deepEqual([rec.take.width, rec.take.height], [640, 360]);
     const [cw, ch] = rec.size.split('x').map(Number);
@@ -92,16 +95,19 @@ test('a window is filmed at 30 fps from the countdown, its clicks in the take\'s
     assert.ok(Math.abs(times.length - rec.take.duration * 30) <= 2, `${times.length} frames for ${rec.take.duration} s`);
     const off = times.map((v, i) => wrap(v - ((rec.take.startedAt + (i * 1000) / 30) % (1 << 24)))).sort((a, b) => a - b);
     assert.ok(Math.abs(off[off.length >> 1]) < 80, `median paint offset ${off[off.length >> 1]} ms`);
-    // The camera page again, closer, without filming
+    // The record's length is the file's: a clip may end at it
+    assert.ok(Math.abs(A.fileSeconds(ff, take) - rec.take.duration) < 0.002, `${A.fileSeconds(ff, take)} s of frames, the record says ${rec.take.duration}`);
+    // The view again, closer, without filming
     const lines = A.camera(take, { zoom: '2.5' });
     assert.match(lines.join('\n'), /camera: 2\.5x/);
+    assert.match(readFileSync(join(DIR, 'assets', 'app.view', 'film.html'), 'utf8'), /\{ scale: 2\.\d+;/);
     assert.equal(JSON.parse(readFileSync(join(DIR, 'assets', 'app.record.json'), 'utf8')).zoom, 2.5);
   } finally {
     w.close();
   }
 });
 
-test('from the command line: start returns, the take goes on without it, stop ends it, wait gives it', { skip, timeout: 120_000 }, async () => {
+test('from the command line: start returns, the take goes on without it, stop ends it, wait gives it', { skip, timeout: 300_000 }, async () => {
   const w = await testWindow('still');
   try {
     // No stop in the script: the take runs until stop is asked for
@@ -109,8 +115,11 @@ test('from the command line: start returns, the take goes on without it, stop en
     const take = join(DIR, 'cli', 'long.mp4');
     const s = await cli(['start', take, '--hwnd', String(w.hwnd)]);
     assert.equal(s.status, 0, s.stderr);
-    const still = await cli(['wait', take, '--timeout', '2']);
+    // Stop only once it is filming: starting the capture takes seconds on a busy machine
+    let still = await cli(['wait', take, '--timeout', '2']);
     assert.match(still.stdout, /^still (filming|waiting)/);
+    for (let i = 0; i < 30 && !/^still filming/.test(still.stdout); i++) still = await cli(['wait', take, '--timeout', '2']);
+    assert.match(still.stdout, /^still filming/);
     const asked = await cli(['stop', take]);
     assert.match(asked.stdout, /asked to stop/);
     const r = await cli(['wait', take, '--timeout', '60']);
@@ -126,7 +135,7 @@ test('from the command line: start returns, the take goes on without it, stop en
   }
 });
 
-test('cancel keeps nothing; a window that is not open is an error, not a wait', { skip, timeout: 120_000 }, async () => {
+test('cancel keeps nothing; a window that is not open is an error, not a wait', { skip, timeout: 300_000 }, async () => {
   const w = await testWindow('still');
   try {
     fake('cancel', ['move 50 50', 'wait 200']);

@@ -10,8 +10,10 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 const FPS = 30;
+// The take's colors are BT.709, tagged: a browser reads untagged video as 709, so the film shows the app's own colors
+const COLOR_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv'];
 /** How far the camera page moves in on a click, unless the record says otherwise. */
 export const ZOOM = 1.7;
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -26,7 +28,10 @@ const HELP = `app-demo ${VERSION}: film a desktop app while the person works it 
   node record-app.mjs wait <take.mp4> [--timeout <s>] waits for the take (${100} s at most per call; run it again)
   node record-app.mjs stop <take.mp4>                 stops it, as Stop on the bar does; cancel throws it away
   node record-app.mjs camera <take.mp4> [--zoom <n|off>]
-                                                     writes the camera page again; nothing is filmed
+                                                     writes the view and the pointer page again, how far the camera
+                                                     moves in changed; nothing is filmed
+  node record-app.mjs check <film.html>              what is wrong with the clips of takes in the film: a clip past
+                                                     the take's end, a pointer page off its video, a click with no pointer
   node record-app.mjs moments <take.mp4> [--film film.html]
                                                      where each mark and click falls, in the take and on the film:
                                                      where a line said over it goes
@@ -43,7 +48,7 @@ Options for start:
   --note <text>     what the person is asked to do, shown on the bar
   --marks <a,b>     names of the moments the person marks with Mark, in order
   --max <s>         the longest take (300)
-  --zoom <n|off>    how far the camera page moves in on a click (${ZOOM}); 1 to 4, or off
+  --zoom <n|off>    how far the camera moves in on a click (${ZOOM}); 1 to 4, or off
   --lang <zh|en>    the bar's language (the system's)
 
 The person presses Start (F9), works the app, presses Mark (F9) at each moment worth naming, and Stop (F10).
@@ -53,9 +58,11 @@ Beside the video:
   <name>.record.json   what was filmed and what happened: the size, every pointer move and click, the marks
   <name>.cursor.html   a page drawing the pointer (smoothed) and its clicks; on the track above the video, with the
                        same at, #t= and box
-  <name>.camera.html   the take as a page that moves in on each click and keeps the pointer in view, the pointer
-                       drawn in: in place of the video (and its cursor page), with the same #t=
-A page plays at one speed: leave clips you speed up as plain video.`;
+  <name>.view/film.html  a film of its own: the take moving in on each click and keeping the pointer in view, the
+                       pointer drawn in. A clip of your film in place of the video (and its cursor page), with the
+                       same #t=; the film crops it at its box, so it can be a card; it renders about as fast as plain
+                       video. Its camera is the video and the pointer page moved by CSS keyframes (OpenFilm 0.3)
+A page plays at one speed: leave clips you speed up as plain video, without the camera.`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const round3 = (x) => Math.round(x * 1000) / 1000;
@@ -77,6 +84,7 @@ const controlFile = (take) => join(runsDir(), `${runKey(take)}.control`);
 export const recordFileFor = (video) => join(dirname(video), `${basename(video, extname(video))}.record.json`);
 export const cursorFileFor = (video) => join(dirname(video), `${basename(video, extname(video))}.cursor.html`);
 export const cameraFileFor = (video) => join(dirname(video), `${basename(video, extname(video))}.camera.html`);
+export const viewFileFor = (video) => join(dirname(video), `${basename(video, extname(video))}.view`, 'film.html');
 
 function readJson(file) {
   try {
@@ -210,11 +218,12 @@ async function install() {
 /** gfxcapture source for a window's client area, or a monitor cropped to a region. */
 export function captureFilter(t) {
   const base = `capture_cursor=0:max_framerate=${FPS}`;
-  if (t.mode === 'window') return `gfxcapture=hwnd=${t.hwnd}:${base}:width=-2:height=-2,hwdownload,format=bgra,format=yuv420p`;
+  const yuv = 'format=bgra,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p';
+  if (t.mode === 'window') return `gfxcapture=hwnd=${t.hwnd}:${base}:width=-2:height=-2,hwdownload,${yuv}`;
   const m = t.monitor.rect;
   const r = t.region;
   const crop = `crop_left=${r.x - m.x}:crop_top=${r.y - m.y}:crop_right=${m.x + m.w - (r.x + r.w)}:crop_bottom=${m.y + m.h - (r.y + r.h)}`;
-  return `gfxcapture=hmonitor=${t.monitor.handle}:${base}:${crop},hwdownload,format=bgra,format=yuv420p`;
+  return `gfxcapture=hmonitor=${t.monitor.handle}:${base}:${crop},hwdownload,${yuv}`;
 }
 
 /**
@@ -223,6 +232,13 @@ export function captureFilter(t) {
  */
 export function finishFilter(skip, dur) {
   return `setpts=PTS-STARTPTS,fps=${FPS},tpad=stop_mode=clone:stop_duration=${(skip + dur + 1).toFixed(3)},trim=start=${skip.toFixed(3)}:duration=${dur.toFixed(3)},setpts=PTS-STARTPTS`;
+}
+
+/** How many seconds the frames of a finished take add up to (counted without decoding), or null. */
+export function fileSeconds(ff, file) {
+  const r = spawnSync(ff, ['-hide_banner', '-nostdin', '-v', 'error', '-stats', '-i', file, '-map', '0:v:0', '-c', 'copy', '-f', 'null', '-'], { encoding: 'utf8', windowsHide: true, maxBuffer: 1 << 24 });
+  const n = [...`${r.stderr}`.matchAll(/frame=\s*(\d+)/g)].pop();
+  return r.status === 0 && n && Number(n[1]) > 0 ? Number(n[1]) / FPS : null;
 }
 
 /**
@@ -371,6 +387,75 @@ export function cameraPath(record, pointer = pointerPath(record)) {
   });
 }
 
+/** The name of a take's camera animation: its file's name, kept to what a CSS identifier takes. */
+export function cameraName(record) {
+  const n = basename(record.take.video, extname(record.take.video)).replace(/[^A-Za-z0-9_-]/g, '-');
+  return `${/^[A-Za-z_]/.test(n) ? n : `take-${n}`}-camera`;
+}
+
+/** The camera's animation of a clip that starts at the take's start. */
+export const cameraAnimation = (record) => `${cameraName(record)} ${fmt(record.take.duration)}s linear 0s both`;
+
+/**
+ * The camera as keyframes of a clip's own CSS animation: [t, scale, x, y] with x and y the `translate` in % of the
+ * clip's box (the box the take's own shape), thinned until no stop is more than `tol` px, on a box 1920 px wide, off
+ * the path the camera page follows.
+ */
+export function cameraStops(record, tol = 1) {
+  const [w, h] = record.size.split('x').map(Number);
+  const D = record.take.duration;
+  const path = cameraPath(record);
+  const at = (t) => {
+    const f = Math.min(t * PATH_RATE, path.length - 1);
+    const i = Math.floor(f);
+    const k = f - i;
+    const p = path[i];
+    const q = path[Math.min(i + 1, path.length - 1)];
+    return p.map((v, j) => v + (q[j] - v) * k);
+  };
+  const pts = [];
+  const n = Math.floor(D * PATH_RATE + 1e-9);
+  for (let i = 0; i <= n; i++) pts.push(i / PATH_RATE);
+  if (D - pts[pts.length - 1] > 1e-6) pts.push(D);
+  const rows = pts.map((t) => {
+    const [s, l, top] = at(t);
+    return [t, s, 100 * ((s - 1) / 2 - (s * l) / w), 100 * ((s - 1) / 2 - (s * top) / h)];
+  });
+  const off = (p, a, b) => {
+    const k = (p[0] - a[0]) / (b[0] - a[0]);
+    const lerp = (j) => a[j] + (b[j] - a[j]) * k;
+    return Math.max(Math.abs(p[2] - lerp(2)) * 19.2, Math.abs(p[3] - lerp(3)) * 19.2 * (h / w), Math.abs(p[1] - lerp(1)) * 960);
+  };
+  // Ramer-Douglas-Peucker, on a stack of spans
+  const keep = new Set([0, rows.length - 1]);
+  const spans = [[0, rows.length - 1]];
+  while (spans.length) {
+    const [lo, hi] = spans.pop();
+    let far = -1;
+    let most = tol;
+    for (let i = lo + 1; i < hi; i++) {
+      const e = off(rows[i], rows[lo], rows[hi]);
+      if (e > most) { most = e; far = i; }
+    }
+    if (far >= 0) { keep.add(far); spans.push([lo, far], [far, hi]); }
+  }
+  return [...keep].sort((a, b) => a - b).map((i) => rows[i]);
+}
+
+/** The camera as a block of CSS: the keyframes, one stop to a line. */
+export function cameraCss(record) {
+  const D = record.take.duration;
+  const name = cameraName(record);
+  const num = (v, d) => String(Math.round(v * 10 ** d) / 10 ** d);
+  const lines = [];
+  for (const [t, v, x, y] of cameraStops(record)) {
+    const line = `  ${num((t / D) * 100, 3)}% { scale: ${num(v, 4)}; translate: ${num(x, 3)}% ${num(y, 3)}% }`;
+    if (lines.length && lines[lines.length - 1].split('%')[0] === line.split('%')[0]) lines.pop();
+    lines.push(line);
+  }
+  return { name, text: `@keyframes ${name} {\n${lines.join('\n')}\n}\n` };
+}
+
 /**
  * A page of the take: `camera` false, the pointer and its clicks alone, laid over the video; `camera` true, the take
  * itself moving in on its clicks with the pointer drawn in, used in place of the video.
@@ -478,9 +563,48 @@ if (!window.filmHost) {
 `;
 }
 
-/** The clips of film.html that are this take (its video, cursor or camera page): #t= in and out, at and speed. */
+/**
+ * The take's view: a film of its own (OpenFilm 0.3.0) in the take's shape, the plain video and its pointer page moved
+ * by the camera's keyframes. Used as a clip, in place of the video, with the same #t=; the film it sits in crops it at
+ * its box, so it works as a card too, and it renders about as fast as plain video.
+ */
+export function viewFilm(record) {
+  const [w, h] = record.size.split('x').map(Number);
+  const D = record.take.duration;
+  const name = basename(record.take.video, extname(record.take.video));
+  const src = (f) => `../${encodeURI(f).replace(/#/g, '%23').replace(/\?/g, '%3F')}`;
+  const css = cameraCss(record);
+  const move = `animation: ${cameraAnimation(record)}`;
+  const box = `left: 0; top: 0; width: ${w}px; height: ${h}px`;
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=${w}, height=${h}">
+<title>View of ${record.take.video}</title>
+<!-- Made by app-demo from ${record.take.video}: the take moving in on its clicks, with its pointer. Use it as a clip of
+     a film in place of the video, with the same #t=; "record-app.mjs camera ${name}.mp4 --zoom <n|off>" writes it again. -->
+<style>
+${css.text}</style>
+</head>
+<body>
+<section>
+<iframe src="${src(`${name}.cursor.html`)}#t=0,${D}" style="${box}; ${move}"></iframe>
+</section>
+<section>
+<video src="${src(record.take.video)}#t=0,${D}" style="${box}; ${move}"></video>
+</section>
+</body>
+</html>
+`;
+}
+
+/**
+ * The clips of film.html that are this take: #t= in and out, at and speed, what each is (`video`, its `cursor` page,
+ * its `camera` page or its `view` film, by the order of `files`) and its style.
+ */
 export function takeClips(html, filmDir, files, duration) {
-  const targets = new Set(files.map((f) => resolve(f).toLowerCase()));
+  const targets = files.map((f) => resolve(f).toLowerCase());
   const out = [];
   for (const [, attrs] of html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<(?:iframe|video)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
     const attr = (n) => new RegExp(`(?:^|\\s)${n}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attrs)?.slice(1).find((x) => x !== undefined);
@@ -493,11 +617,95 @@ export function takeClips(html, filmDir, files, duration) {
     } catch {
       continue;
     }
-    if (!targets.has(abs.toLowerCase())) continue;
+    const which = targets.indexOf(abs.toLowerCase());
+    if (which < 0) continue;
     const t = /^t=(?:npt:)?(\d*\.?\d*)(?:,(\d*\.?\d+))?$/.exec(frag);
-    out.push({ tin: t && t[1] !== '' ? Number(t[1]) : 0, tout: t && t[2] !== undefined ? Number(t[2]) : duration, at: Number(attr('at') ?? 0) || 0, speed: Number(attr('speed') ?? 1) || 1 });
+    out.push({
+      tin: t && t[1] !== '' ? Number(t[1]) : 0,
+      tout: t && t[2] !== undefined ? Number(t[2]) : duration,
+      at: Number(attr('at') ?? 0) || 0,
+      speed: Number(attr('speed') ?? 1) || 1,
+      kind: ['video', 'cursor', 'camera', 'view'][which] ?? 'video',
+      style: attr('style') ?? '',
+    });
   }
   return out;
+}
+
+/** A style attribute as its declarations, by property. */
+function declarations(style) {
+  const out = {};
+  let depth = 0;
+  let cur = '';
+  const take = () => {
+    const i = cur.indexOf(':');
+    if (i > 0) out[cur.slice(0, i).trim().toLowerCase()] = cur.slice(i + 1).trim();
+    cur = '';
+  };
+  for (const ch of style) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ';' && depth === 0) take();
+    else cur += ch;
+  }
+  take();
+  return out;
+}
+
+/**
+ * What is wrong with the clips of the takes in film.html, each with a way to put it right; an empty list is a film
+ * whose takes are placed within their length and whose clicks have a pointer.
+ */
+export function checkFilm(filmArg) {
+  const film = resolve(filmArg ?? '');
+  if (!existsSync(film)) throw new Error(`${shown(film)} is not there`);
+  const html = readFileSync(film, 'utf8');
+  const dir = dirname(film);
+  const videos = new Map();
+  for (const [, attrs] of html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<(?:iframe|video)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
+    const src = /(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs)?.slice(1).find((x) => x !== undefined);
+    if (!src) continue;
+    let abs;
+    try {
+      abs = resolve(dir, decodeURIComponent(src.split('#')[0].replace(/&amp;/g, '&')));
+    } catch {
+      continue;
+    }
+    const video = abs.replace(/\.(?:cursor|camera)\.html$/i, '.mp4').replace(/\.view[\\/]film\.html$/i, '.mp4');
+    if (/\.mp4$/i.test(video) && existsSync(recordFileFor(video))) videos.set(video.toLowerCase(), video);
+  }
+  if (!videos.size) return { code: 1, lines: [`${shown(film)} has no clip of a take made by record-app.mjs (a video with a .record.json beside it)`] };
+  const problems = [];
+  const notes = [];
+  const lines = [];
+  for (const video of videos.values()) {
+    const record = readJson(recordFileFor(video));
+    if (!record?.take) continue;
+    const D = record.take.duration;
+    const clips = takeClips(html, dir, [video, cursorFileFor(video), cameraFileFor(video), viewFileFor(video)], D);
+    const name = shown(video);
+    const count = (kind) => clips.filter((c) => c.kind === kind).length;
+    lines.push(`${name}: ${count('video')} clip(s) of the video, ${count('view')} of its view, ${count('cursor')} of its pointer page, ${count('camera')} of its camera page`);
+    for (const c of clips) {
+      const where = `${{ video: 'video', cursor: 'pointer page', camera: 'camera page', view: 'view' }[c.kind]} clip at ${fmt(c.at)} s (#t=${fmt(c.tin)},${fmt(c.tout)})`;
+      if (c.tout > D + 0.002) problems.push(`${name}: the ${where} runs to ${fmt(c.tout)} s, past the take's ${fmt(D)} s: end it at ${fmt(Math.floor(D * 1000) / 1000)} at most`);
+    }
+    if (count('camera')) notes.push(`${name}: its camera page renders many times slower than its view, ${shown(viewFileFor(video))}, which is the same picture with the same #t=`);
+    // A pointer page lies on its video, in its box
+    const box = (s) => ['left', 'top', 'width', 'height'].map((k) => declarations(s)[k] ?? '').join(' ');
+    for (const p of clips.filter((c) => c.kind === 'cursor')) {
+      const v = clips.find((c) => c.kind === 'video' && Math.abs(c.at - p.at) < 0.002 && Math.abs(c.tin - p.tin) < 0.002);
+      if (v && box(v.style) !== box(p.style)) problems.push(`${name}: the pointer page at ${fmt(p.at)} s is not in the video's box (${box(v.style)}): the pointer would land beside the click`);
+    }
+    // Clicks on a plain video with no pointer over them
+    const bare = record.take.events.filter((e) => e.type === 'down'
+      && clips.some((c) => c.kind === 'video' && e.t >= c.tin - 1e-6 && e.t < c.tout)
+      && !clips.some((c) => c.kind !== 'video' && e.t >= c.tin - 1e-6 && e.t < c.tout));
+    if (bare.length) notes.push(`${name}: ${bare.length} click${bare.length === 1 ? '' : 's'} (${bare.slice(0, 4).map((e) => `${fmt(e.t)} s`).join(', ')}${bare.length > 4 ? ', ...' : ''} of the take) on the film with no pointer over ${bare.length === 1 ? 'it' : 'them'}: use the view in place of the video, or lay ${shown(cursorFileFor(video))} on it with the same at, #t= and box`);
+  }
+  const out = [...lines, ...problems.map((p) => `problem: ${p}`), ...notes.map((n) => `note: ${n}`)];
+  out.push(problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'}: put each right and run check again; moments says where each line of voice goes` : 'no problem found: moments says where each mark and click falls, for the voice');
+  return { code: problems.length ? 1 : 0, lines: out };
 }
 
 /** Where each mark and click of a take falls, in the take and on the film: one line each. */
@@ -508,7 +716,7 @@ export function moments(videoArg, o = {}) {
   const record = JSON.parse(readFileSync(recFile, 'utf8'));
   let film = o.film ? resolve(o.film) : null;
   for (let d = dirname(video), i = 0; !film && i < 6; i++, d = dirname(d)) if (existsSync(join(d, 'film.html'))) film = join(d, 'film.html');
-  const clips = film && existsSync(film) ? takeClips(readFileSync(film, 'utf8'), dirname(film), [video, cursorFileFor(video), cameraFileFor(video)], record.take.duration) : [];
+  const clips = film && existsSync(film) ? takeClips(readFileSync(film, 'utf8'), dirname(film), [video, cursorFileFor(video), cameraFileFor(video), viewFileFor(video)], record.take.duration) : [];
   let click = 0;
   const rows = record.take.events.filter((e) => e.type === 'mark' || e.type === 'down')
     .map((e) => ({ what: e.type === 'mark' ? `mark "${e.name}"` : `click ${++click}`, t: e.t }));
@@ -593,8 +801,11 @@ export function camera(videoArg, o = {}) {
   if (o.zoom !== undefined) record.zoom = zoomValue(o.zoom, '--zoom');
   writeJson(recFile, record);
   writeFileSync(cursorFileFor(video), takePage(record, false));
-  writeFileSync(cameraFileFor(video), takePage(record, true));
-  return [`${shown(cameraFileFor(video))}  written`, ...zoomLines(record)];
+  mkdirSync(dirname(viewFileFor(video)), { recursive: true });
+  writeFileSync(viewFileFor(video), viewFilm(record));
+  // A camera page an earlier version wrote stays the same camera as the view
+  if (existsSync(cameraFileFor(video))) writeFileSync(cameraFileFor(video), takePage(record, true));
+  return [`${shown(viewFileFor(video))}  written`, ...zoomLines(record)];
 }
 
 // ---------------------------------------------------------------- a take (the worker, detached from start)
@@ -693,7 +904,7 @@ async function worker(o) {
         else if (e.ev === 'target') {
           target = e;
           clearTimeout(waitStart);
-          const a = ['-hide_banner', '-loglevel', 'error', '-y', '-progress', 'pipe:1', '-stats_period', '0.05', '-filter_complex', captureFilter(e), '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '16', '-flush_packets', '1', '-f', 'mpegts', raw];
+          const a = ['-hide_banner', '-loglevel', 'error', '-y', '-progress', 'pipe:1', '-stats_period', '0.05', '-filter_complex', captureFilter(e), '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '16', ...COLOR_TAGS, '-flush_packets', '1', '-f', 'mpegts', raw];
           const c = spawn(ff, a, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
           cap = c;
           c.stderr.on('data', (d) => (capErr = (capErr + d).slice(-4000)));
@@ -755,14 +966,16 @@ async function worker(o) {
     const name = basename(out, extname(out));
     const tmp = join(work, `${name}.mp4`);
     // A key frame every quarter second: a page that sets the take's time frame by frame seeks it quickly
-    const fin = spawnSync(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-an', '-vf', finishFilter(skip, dur), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-g', String(Math.round(FPS / 4)), '-movflags', '+faststart', tmp], { encoding: 'utf8', windowsHide: true, maxBuffer: 1 << 24 });
+    const fin = spawnSync(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-an', '-vf', finishFilter(skip, dur), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', ...COLOR_TAGS, '-g', String(Math.round(FPS / 4)), '-movflags', '+faststart', tmp], { encoding: 'utf8', windowsHide: true, maxBuffer: 1 << 24 });
     if (fin.status !== 0 || !existsSync(tmp)) throw new Error(`could not finish the take: ${(fin.stderr ?? '').trim().slice(-300)}`);
     const probe = spawnSync(ff, ['-hide_banner', '-i', tmp], { encoding: 'utf8', windowsHide: true });
     const m = /Video:[^\n]*?(\d{2,5})x(\d{2,5})/.exec(probe.stderr ?? '');
     const width = m ? Number(m[1]) : target.region.w;
     const height = m ? Number(m[2]) : target.region.h;
     const scale = target.scale > 0 ? target.scale : 1;
-    const events = toEvents(evs, goMs, dur, scale, o.marks);
+    // The take is as long as the file is: a clip's #t= may run to the end of it and no further
+    const length = fileSeconds(ff, tmp) ?? dur;
+    const events = toEvents(evs, goMs, length, scale, o.marks);
     const record = {
       app: { mode: o.mode, window: target.title ?? null, program: target.exe ?? null, screen: (target.monitor?.index ?? 0) + 1 },
       size: `${Math.round(width / scale)}x${Math.round(height / scale)}`,
@@ -775,7 +988,7 @@ async function worker(o) {
         video: basename(out),
         width,
         height,
-        duration: round3(dur),
+        duration: round3(length),
         // The first frame, in ms since 1970, to line the take up with anything else recorded then
         startedAt: goMs,
         stopped: stop.why ?? 'user',
@@ -786,9 +999,12 @@ async function worker(o) {
     };
     writeFileSync(join(work, `${name}.record.json`), `${JSON.stringify(record, null, 1)}\n`);
     writeFileSync(join(work, `${name}.cursor.html`), takePage(record, false));
-    writeFileSync(join(work, `${name}.camera.html`), takePage(record, true));
+    mkdirSync(join(work, `${name}.view`));
+    writeFileSync(join(work, `${name}.view`, 'film.html'), viewFilm(record));
     mkdirSync(dirname(out), { recursive: true });
-    for (const f of [`${name}.mp4`, `${name}.record.json`, `${name}.cursor.html`, `${name}.camera.html`]) moveFile(join(work, f), join(dirname(out), f));
+    for (const f of [`${name}.mp4`, `${name}.record.json`, `${name}.cursor.html`]) moveFile(join(work, f), join(dirname(out), f));
+    mkdirSync(join(dirname(out), `${name}.view`), { recursive: true });
+    moveFile(join(work, `${name}.view`, 'film.html'), viewFileFor(out));
     state('done', {
       result: {
         duration: record.take.duration,
@@ -902,7 +1118,7 @@ export async function wait(takeArg, o = {}) {
         `${shown(out)}  ${r.width} x ${r.height}, ${fmt(r.duration)} s, ${FPS} fps, ${r.clicks} click${r.clicks === 1 ? '' : 's'}${r.window ? `, "${r.window}"` : ''}${r.stopped === 'max' ? ' (stopped at --max)' : r.stopped === 'closed' ? ' (the window closed)' : ''}`,
         `${shown(recordFileFor(out))}  what was filmed and what happened (pointer, clicks, marks; size ${r.size} px)`,
         `${shown(cursorFileFor(out))}  the pointer, a page to lay over the video`,
-        `${shown(cameraFileFor(out))}  the take moving in on its clicks, with the pointer: a page to use in place of the video`,
+        `${shown(viewFileFor(out))}  the take moving in on its clicks, with the pointer: a film to use as a clip, in place of the video, with the same #t=`,
         r.marks.length ? `marks: ${r.marks.map((m) => `${m.name} ${fmt(m.t)} s`).join(' · ')}` : 'marks: none',
         ...r.camera,
       ].join('\n'),
@@ -961,9 +1177,15 @@ async function main(argv) {
   }
   if (cmd === 'stop' || cmd === 'cancel') return console.log(control(arg, cmd));
   if (cmd === 'camera') return console.log(camera(arg, { zoom: v.zoom }).join('\n'));
+  if (cmd === 'check') {
+    const r = checkFilm(arg);
+    console.log(r.lines.join('\n'));
+    if (r.code) process.exitCode = r.code;
+    return;
+  }
   if (cmd === 'moments') return console.log(moments(arg, { film: v.film }).join('\n'));
   if (cmd === 'guide') return console.log(guide(arg, { out: v.out }).join('\n'));
-  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera, moments, guide or install`);
+  throw new Error(`no command ${cmd}: windows, start, wait, stop, cancel, camera, check, moments, guide or install`);
 }
 
 const same = (x) => (windows() ? resolve(x).toLowerCase() : resolve(x));
