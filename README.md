@@ -1,17 +1,17 @@
 # app-demo
 
-An [OpenFilm](https://github.com/openfilm/openfilm) skill: film a demo of any Windows program while you work it. Every
+An [OpenFilm](https://github.com/openfilm/openfilm) skill: film a demo of a Windows program while you work it. Every
 click is logged, so the film gets a smooth pointer and a camera that moves in on each click, with no keyframes set by
 hand.
 
 ![An Excel take cut in OpenFilm: the camera moves in on each click and follows the pointer](docs/demo.gif)
 
-Filmed in Excel with this skill, cut in OpenFilm to the moments around each click and mark, rendered by OpenFilm.
+Filmed in Excel with an earlier version of this skill, cut in OpenFilm to the moments around each click and mark, rendered by OpenFilm.
 `node demo/make.mjs <take.mp4>` makes it from any take.
 
 | | | |
 | --- | --- | --- |
-| <img src="skills/app-demo/cover.jpg" width="200" alt=""> | [Desktop app demo](skills/app-demo) | A demo of any Windows program, filmed while you work it, with a smooth pointer and a camera that moves in on each click. |
+| <img src="skills/app-demo/cover.jpg" width="200" alt=""> | [Desktop app demo](skills/app-demo) | A demo of a Windows program, filmed while you work it, with a smooth pointer and a camera that moves in on each click. |
 
 For a site or web app, use [web-demo](https://github.com/WEBGRS/openfilm-web-demo) instead: it films from a list of
 steps and films again after every release. For voice-over without a key,
@@ -94,7 +94,9 @@ npm test            # unit tests, then real takes of a test window with scripted
 npm run check       # the skill folder against OpenFilm's skill rules
 ```
 
-`evals/README.md` says how the skill was tried, with and without it, on two requests.
+In two trials on a test window, with no real app, the skill was not clearly better than the same agent given the same
+recorder files. The camera matched, and the voice lines sat closer to the marks with the skill. The numbers and what was
+not tried are in [evals](evals/README.md).
 
 The real takes open a small test window that paints its own clock into every frame, film it with the record bar
 hidden and the pointer scripted (`APP_DEMO_FAKE`), and check that each frame was painted within 80 ms of when the take
